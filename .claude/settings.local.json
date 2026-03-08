@@ -10,7 +10,8 @@
       "Bash(/tmp/new_listAllBackups.txt:*)",
       "Read(//tmp/**)",
       "Bash(/tmp/listAllBackups_with_timeout.txt:*)",
-      "Bash(/tmp/export_with_notification.txt:*)"
+      "Bash(/tmp/export_with_notification.txt:*)",
+      "Bash(ls -lh *.md)"
     ]
   }
 }
