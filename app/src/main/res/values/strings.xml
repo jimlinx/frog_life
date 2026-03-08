@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Frog Life</string>
+    <string name="settings">Settings</string>
+    <string name="manage_frogs">Manage Frogs</string>
+    <string name="manage_activities">Manage Activities</string>
+    <string name="calendar">Calendar</string>
+    <string name="view_frog">View Frog</string>
+    <string name="biometric_prompt_title">Admin Authentication</string>
+    <string name="biometric_prompt_subtitle">Authenticate to modify wealth points</string>
+    <string name="biometric_prompt_negative">Cancel</string>
+</resources>

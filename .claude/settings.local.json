@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find app:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(~/Library/Android/sdk/platform-tools/adb install:*)",
+      "Bash(./gradlew assembleDebug:*)"
+    ]
+  }
+}

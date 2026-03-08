@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="frog_green">#4CAF50</color>
+    <color name="frog_green_dark">#2E7D32</color>
+    <color name="frog_green_light">#81C784</color>
+    <color name="pond_blue">#42A5F5</color>
+    <color name="sakura_pink">#FF6B9D</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>
