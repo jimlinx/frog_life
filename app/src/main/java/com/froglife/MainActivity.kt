@@ -1,11 +1,17 @@
 package com.froglife
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -20,6 +26,9 @@ import com.froglife.viewmodel.ActivityViewModel
 import com.froglife.viewmodel.CalendarViewModel
 import com.froglife.viewmodel.FrogViewModel
 import com.froglife.viewmodel.RewardViewModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
     private lateinit var repository: FrogRepository
@@ -28,6 +37,16 @@ class MainActivity : FragmentActivity() {
     private lateinit var calendarViewModel: CalendarViewModel
     private lateinit var rewardViewModel: RewardViewModel
     private var syncService: GCSSyncService? = null
+
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            Log.d("FrogLife", "Notification permission granted")
+        } else {
+            Log.d("FrogLife", "Notification permission denied")
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,9 +61,63 @@ class MainActivity : FragmentActivity() {
         // Initialize GCS sync service if credentials file exists
         try {
             syncService = GCSSyncService(applicationContext, repository)
+            Log.d("FrogLife", "GCS sync service initialized")
         } catch (e: Exception) {
-            // Sync service not available (credentials not found)
+            Log.w("FrogLife", "GCS sync service not available (credentials not found)")
             syncService = null
+        }
+
+        // Request notification permission for Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
+        // Try to get FCM token (optional - app works without it)
+        syncService?.let { service ->
+            try {
+                // Import Firebase classes dynamically to avoid crash if not configured
+                val firebaseMessaging = Class.forName("com.google.firebase.messaging.FirebaseMessaging")
+                    .getDeclaredMethod("getInstance")
+                    .invoke(null)
+
+                val getTokenMethod = firebaseMessaging.javaClass.getMethod("getToken")
+                val tokenTask = getTokenMethod.invoke(firebaseMessaging) as com.google.android.gms.tasks.Task<*>
+
+                tokenTask.addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        val token = task.result as? String
+                        if (token != null) {
+                            Log.d("FrogLife", "FCM Token obtained: ${token.take(20)}...")
+
+                            // Upload token to GCS in background
+                            CoroutineScope(Dispatchers.IO).launch {
+                                try {
+                                    service.uploadDeviceToken(token)
+                                    Log.d("FrogLife", "FCM token uploaded to GCS")
+                                } catch (e: Exception) {
+                                    Log.e("FrogLife", "Failed to upload FCM token", e)
+                                }
+                            }
+                        }
+                    } else {
+                        Log.w("FrogLife", "FCM not available (google-services.json missing or Firebase not configured)")
+                        Log.w("FrogLife", "App will work without push notifications")
+                    }
+                }
+            } catch (e: Exception) {
+                // Firebase not configured - app will work without push notifications
+                Log.w("FrogLife", "FCM not available: ${e.message}")
+                Log.w("FrogLife", "App will work without push notifications. To enable FCM:")
+                Log.w("FrogLife", "1. Download google-services.json from Firebase Console")
+                Log.w("FrogLife", "2. Place it in app/ directory")
+                Log.w("FrogLife", "3. Rebuild the app")
+            }
         }
 
         setContent {

@@ -5,7 +5,12 @@
       "Bash(find:*)",
       "Bash(grep:*)",
       "Bash(~/Library/Android/sdk/platform-tools/adb install:*)",
-      "Bash(./gradlew assembleDebug:*)"
+      "Bash(./gradlew assembleDebug:*)",
+      "Bash(sed:*)",
+      "Bash(/tmp/new_listAllBackups.txt:*)",
+      "Read(//tmp/**)",
+      "Bash(/tmp/listAllBackups_with_timeout.txt:*)",
+      "Bash(/tmp/export_with_notification.txt:*)"
     ]
   }
 }

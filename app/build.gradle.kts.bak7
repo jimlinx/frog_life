@@ -116,9 +116,6 @@ dependencies {
         exclude(group = "org.apache.httpcomponents")
     }
     implementation("com.google.http-client:google-http-client-android:1.43.3")
-    
-    // Google Auth Library for OAuth 2.0 (used by FCM HTTP v1 API)
-    implementation("com.google.auth:google-auth-library-oauth2-http:1.19.0")
 
     // WorkManager for auto-sync
     implementation("androidx.work:work-runtime-ktx:2.9.0")

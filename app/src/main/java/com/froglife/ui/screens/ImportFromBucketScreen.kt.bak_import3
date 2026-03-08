@@ -50,23 +50,6 @@ fun ImportFromBucketScreen(
     var selectedFolder by remember { mutableStateOf("all") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
-        isLoading = true
-        errorMessage = null
-        try {
-            android.util.Log.d("ImportFromBucket", "Starting to load files from bucket...")
-            availableFiles = syncService.listAllBackups()
-            android.util.Log.d("ImportFromBucket", "Loaded ${availableFiles.size} files")
-        } catch (e: Exception) {
-            android.util.Log.e("ImportFromBucket", "Error loading files: ${e.message}", e)
-            errorMessage = "Error loading files: ${e.message}"
-            withContext(Dispatchers.Main) {
-                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
-            }
-        } finally {
-            isLoading = false
-        }
-    }
 
     Scaffold(
         topBar = {

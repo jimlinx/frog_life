@@ -28,3 +28,6 @@ proguard/
 
 # GCS Sync credentials - NEVER commit this file
 app/src/main/assets/frog-sync-key.json
+
+# Firebase configuration - NEVER commit this file
+app/google-services.json

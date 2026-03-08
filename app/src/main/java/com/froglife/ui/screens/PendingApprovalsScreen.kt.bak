@@ -121,13 +121,6 @@ fun PendingApprovalsScreen(
                                     )
 
                                     // Refresh pending list
-                                    
-                                    // Notify slave device via FCM
-                                    try {
-                                        syncService.notifySlaveOfApproval(change.deviceId)
-                                    } catch (e: Exception) {
-                                        // FCM notification failed, but approval succeeded
-                                    }
                                     pendingChanges = syncService.listPendingChanges()
 
                                     withContext(Dispatchers.Main) {

@@ -170,54 +170,32 @@ class GCSSyncService(
 
     // List all backups from all folders (approved + manual_backups + pending + rejected)
     suspend fun listAllBackups(): List<BucketFile> = withContext(Dispatchers.IO) {
-        android.util.Log.d("GCS", "listAllBackups: Starting to list files from bucket: $bucketName")
         try {
-            // Add 15 second timeout
-            kotlinx.coroutines.withTimeout(15000) {
-                val folders = listOf("approved/", "manual_backups/", "pending/", "rejected/")
-                val allFiles = mutableListOf<BucketFile>()
+            val folders = listOf("approved/", "manual_backups/", "pending/", "rejected/")
+            val allFiles = mutableListOf<BucketFile>()
 
-                folders.forEach { prefix ->
-                    android.util.Log.d("GCS", "listAllBackups: Checking folder: $prefix")
-                    try {
-                        val startTime = System.currentTimeMillis()
-                        val objects = storage.objects().list(bucketName)
-                            .setPrefix(prefix)
-                            .execute()
-                        val elapsed = System.currentTimeMillis() - startTime
-                        android.util.Log.d("GCS", "listAllBackups: API call took ${elapsed}ms for $prefix")
+            folders.forEach { prefix ->
+                val objects = storage.objects().list(bucketName)
+                    .setPrefix(prefix)
+                    .execute()
 
-                        val count = objects.items?.size ?: 0
-                        android.util.Log.d("GCS", "listAllBackups: Found $count files in $prefix")
-
-                        objects.items?.forEach { obj ->
-                            val sizeInBytes = obj.getSize()?.toLong() ?: 0L
-                            android.util.Log.d("GCS", "listAllBackups: File: ${obj.name}, size: $sizeInBytes bytes")
-                            allFiles.add(
-                                BucketFile(
-                                    fileName = obj.name,
-                                    displayName = obj.name.removePrefix(prefix).removeSuffix(".json"),
-                                    timestamp = obj.updated.value,
-                                    size = sizeInBytes,
-                                    folder = prefix.removeSuffix("/")
-                                )
-                            )
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.e("GCS", "listAllBackups: Error listing $prefix: ${e.javaClass.simpleName}: ${e.message}", e)
-                        // Continue to next folder instead of failing completely
-                    }
+                objects.items?.forEach { obj ->
+                    val sizeInBytes = obj.getSize()?.toLong() ?: 0L
+                    allFiles.add(
+                        BucketFile(
+                            fileName = obj.name,
+                            displayName = obj.name.removePrefix(prefix).removeSuffix(".json"),
+                            timestamp = obj.updated.value,
+                            size = sizeInBytes,
+                            folder = prefix.removeSuffix("/")
+                        )
+                    )
                 }
-
-                android.util.Log.d("GCS", "listAllBackups: Total files found: ${allFiles.size}")
-                allFiles.sortedByDescending { it.timestamp }
             }
-        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-            android.util.Log.e("GCS", "listAllBackups: Timeout after 15 seconds - check your internet connection and GCS permissions")
-            throw Exception("Timeout loading files from bucket. Check internet connection and permissions.")
+
+            allFiles.sortedByDescending { it.timestamp }
         } catch (e: Exception) {
-            android.util.Log.e("GCS", "listAllBackups: Fatal error: ${e.javaClass.simpleName}: ${e.message}", e)
-            throw e
+            emptyList()
         }
     }
 
@@ -491,14 +469,52 @@ class GCSSyncService(
         }
     }
 
-    // ===== FCM Notification Sending (HTTP v1 API) =====
+    // ===== FCM Notification Sending =====
+
+    // Send FCM notification to specific device
+    suspend fun sendFCMNotification(
+        token: String,
+        type: String,
+        data: Map<String, String> = emptyMap()
+    ) = withContext(Dispatchers.IO) {
+        try {
+            // Get FCM server key from credentials or environment
+            // For now, we'll use a simple HTTP call
+            // You'll need to add your FCM server key here
+            val serverKey = getFCMServerKey() ?: return@withContext
+
+            val url = "https://fcm.googleapis.com/fcm/send"
+            val payload = org.json.JSONObject().apply {
+                put("to", token)
+                put("data", org.json.JSONObject().apply {
+                    put("type", type)
+                    data.forEach { (key, value) -> put(key, value) }
+                })
+            }
+
+            val client = okhttp3.OkHttpClient()
+            val mediaType = "application/json; charset=utf-8".toMediaType()
+            val requestBody = payload.toString().toRequestBody(mediaType)
+
+            val request = okhttp3.Request.Builder()
+                .url(url)
+                .post(requestBody)
+                .addHeader("Authorization", "key=$serverKey")
+                .addHeader("Content-Type", "application/json")
+                .build()
+
+            client.newCall(request).execute()
+        } catch (e: Exception) {
+            // Silently fail - notification not critical
+        }
+    }
 
     // Notify slave device that changes were approved
     suspend fun notifySlaveOfApproval(deviceId: String) = withContext(Dispatchers.IO) {
         val token = getDeviceToken(deviceId)
         if (token != null) {
-            fcmManager.sendNotification(
-                fcmToken = token,
+            sendFCMNotification(
+                token = token,
                 type = "changes_approved",
                 data = mapOf("timestamp" to System.currentTimeMillis().toString())
             )
@@ -509,8 +525,8 @@ class GCSSyncService(
     suspend fun notifyAllSlavesOfUpdate() = withContext(Dispatchers.IO) {
         val tokens = getAllSlaveTokens()
         tokens.forEach { token ->
-            fcmManager.sendNotification(
-                fcmToken = token,
+            sendFCMNotification(
+                token = token,
                 type = "changes_approved",
                 data = mapOf("timestamp" to System.currentTimeMillis().toString())
             )
@@ -522,12 +538,27 @@ class GCSSyncService(
         val token = getMasterToken()
         if (token != null) {
             val pendingCount = listPendingChanges().size
-            fcmManager.sendNotification(
-                fcmToken = token,
+            sendFCMNotification(
+                token = token,
                 type = "changes_pending",
                 data = mapOf("count" to pendingCount.toString())
             )
         }
+    }
+
+    // Get FCM server key (you'll need to configure this)
+    private fun getFCMServerKey(): String? {
+        // Option 1: Store in local.properties (not checked into git)
+        // Option 2: Store in GCS bucket
+        // Option 3: Use Firebase Admin SDK instead of legacy server key
+        val prefs = context.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
+        return prefs.getString("fcm_server_key", null)
+    }
+
+    // Save FCM server key
+    fun saveFCMServerKey(serverKey: String) {
+        val prefs = context.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("fcm_server_key", serverKey).apply()
     }
 }
 

@@ -1,0 +1,172 @@
+package com.froglife.utils
+
+import android.content.Context
+import com.froglife.data.FrogRepository
+import com.froglife.viewmodel.ActivityViewModel
+import com.froglife.viewmodel.FrogViewModel
+import com.froglife.viewmodel.RewardViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+/**
+ * Shared utility function to import data from ExportData
+ * Used by: SettingsScreen, FrogSyncMessagingService, PendingApprovalsScreen
+ */
+suspend fun importAllData(
+    frogViewModel: FrogViewModel,
+    activityViewModel: ActivityViewModel,
+    rewardViewModel: RewardViewModel,
+    data: ExportData
+) {
+    withContext(Dispatchers.IO) {
+        // Clear all existing data first to avoid duplicates
+        frogViewModel.clearAllData()
+
+        // Import settings (use insert with REPLACE strategy to ensure it's saved)
+        data.settings?.let { frogViewModel.insertSettingsSync(it) }
+
+        // Import frogs (map old IDs to new IDs)
+        val frogIdMap = mutableMapOf<Long, Long>()
+        data.frogs.forEach { frog ->
+            val oldId = frog.id
+            val newId = frogViewModel.insertFrogSync(frog.copy(id = 0))
+            frogIdMap[oldId] = newId
+        }
+
+        // Import activities (map old IDs to new IDs)
+        val activityIdMap = mutableMapOf<Long, Long>()
+        data.activities.forEach { activity ->
+            val oldId = activity.id
+            val newId = activityViewModel.insertActivitySync(activity.copy(id = 0))
+            activityIdMap[oldId] = newId
+        }
+
+        // Import rewards (map old IDs to new IDs) - do this BEFORE cross-refs
+        val rewardIdMap = mutableMapOf<Long, Long>()
+        data.rewards.forEach { reward ->
+            val oldId = reward.id
+            val newId = rewardViewModel.insertRewardSync(reward.copy(id = 0))
+            rewardIdMap[oldId] = newId
+        }
+
+        // Import frog-activity cross-references using new IDs (skip if IDs not found)
+        data.frogActivityRefs.forEach { crossRef ->
+            val newFrogId = frogIdMap[crossRef.frogId]
+            val newActivityId = activityIdMap[crossRef.activityId]
+            if (newFrogId != null && newActivityId != null) {
+                frogViewModel.insertCrossRefSync(crossRef.copy(frogId = newFrogId, activityId = newActivityId))
+            }
+        }
+
+        // Import activity logs using new IDs (skip if IDs not found)
+        data.activityLogs.forEach { log ->
+            val newFrogId = frogIdMap[log.frogId]
+            val newActivityId = activityIdMap[log.activityId]
+            if (newFrogId != null && newActivityId != null) {
+                frogViewModel.insertActivityLogSync(log.copy(id = 0, frogId = newFrogId, activityId = newActivityId))
+            }
+        }
+
+        // Import special dates using new frog IDs (skip if frog not found)
+        data.specialDates.forEach { specialDate ->
+            val newFrogId = frogIdMap[specialDate.frogId]
+            if (newFrogId != null) {
+                frogViewModel.insertSpecialDateSync(specialDate.copy(id = 0, frogId = newFrogId))
+            }
+
+        // Import day comments
+        data.dayComments.forEach { dayComment ->
+            frogViewModel.insertDayCommentSync(dayComment.copy(id = 0))
+        }
+
+        // Import reward redemptions using new frog and reward IDs (skip if IDs not found)
+        data.rewardRedemptions.forEach { redemption ->
+            val newFrogId = frogIdMap[redemption.frogId]
+            val newRewardId = rewardIdMap[redemption.rewardId]
+            if (newFrogId != null && newRewardId != null) {
+                rewardViewModel.insertRedemptionSync(redemption.copy(id = 0, frogId = newFrogId, rewardId = newRewardId))
+            }
+        }
+    }
+}
+
+/**
+ * Import data from repository (for background services without ViewModels)
+ */
+suspend fun importAllData(
+    repository: FrogRepository,
+    data: ExportData
+) {
+    withContext(Dispatchers.IO) {
+        // Clear all existing data
+        repository.clearAllData()
+
+        // Import settings
+        data.settings?.let { repository.insertSettings(it) }
+
+        // Import frogs (map old IDs to new IDs)
+        val frogIdMap = mutableMapOf<Long, Long>()
+        data.frogs.forEach { frog ->
+            val oldId = frog.id
+            val newId = repository.insertFrog(frog.copy(id = 0))
+            frogIdMap[oldId] = newId
+        }
+
+        // Import activities (map old IDs to new IDs)
+        val activityIdMap = mutableMapOf<Long, Long>()
+        data.activities.forEach { activity ->
+            val oldId = activity.id
+            val newId = repository.insertActivity(activity.copy(id = 0))
+            activityIdMap[oldId] = newId
+        }
+
+        // Import rewards (map old IDs to new IDs)
+        val rewardIdMap = mutableMapOf<Long, Long>()
+        data.rewards.forEach { reward ->
+            val oldId = reward.id
+            val newId = repository.insertReward(reward.copy(id = 0))
+            rewardIdMap[oldId] = newId
+        }
+
+        // Import frog-activity cross-references using new IDs
+        data.frogActivityRefs.forEach { crossRef ->
+            val newFrogId = frogIdMap[crossRef.frogId]
+            val newActivityId = activityIdMap[crossRef.activityId]
+            if (newFrogId != null && newActivityId != null) {
+                repository.attachActivityToFrog(newFrogId, newActivityId)
+            }
+        }
+
+        // Import activity logs using new IDs
+        data.activityLogs.forEach { log ->
+            val newFrogId = frogIdMap[log.frogId]
+            val newActivityId = activityIdMap[log.activityId]
+            if (newFrogId != null && newActivityId != null) {
+                repository.insertActivityLog(log.copy(id = 0, frogId = newFrogId, activityId = newActivityId))
+            }
+        }
+
+        // Import special dates using new frog IDs (handle nullable)
+            val newFrogId = frogIdMap[specialDate.frogId]
+            if (newFrogId != null) {
+                repository.insertSpecialDate(specialDate.copy(id = 0, frogId = newFrogId))
+            }
+                repository.insertSpecialDate(specialDate.copy(id = 0, frogId = newFrogId))
+            }
+        }
+
+        // Import day comments
+        data.dayComments.forEach { dayComment ->
+            repository.insertDayComment(dayComment.copy(id = 0))
+        }
+
+        // Import reward redemptions using new frog and reward IDs
+        data.rewardRedemptions.forEach { redemption ->
+            val newFrogId = frogIdMap[redemption.frogId]
+            val newRewardId = rewardIdMap[redemption.rewardId]
+            if (newFrogId != null && newRewardId != null) {
+                repository.insertRedemption(redemption.copy(id = 0, frogId = newFrogId, rewardId = newRewardId))
+            }
+        }
+    }
+}
